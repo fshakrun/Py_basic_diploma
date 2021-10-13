@@ -4,7 +4,6 @@ import json
 from urllib.parse import urljoin
 import requests
 
-
 class Picture:
     name = ''
 
@@ -21,33 +20,34 @@ class Picture:
 
 
 class VkApi:
-    BASE_URL = "https://api.vk.com/method/"
+    TOKEN = ""
+
+    def __init__(self, TOKEN: str):
+        self.vk_token = TOKEN
+
 
     @staticmethod
     def find_hugest(sizes):
-        sizes_chart = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+        sizes_chart = ['x', 'z', 'y', 'r', 'q', 'p', 'o', 'x', 'm', 's']
         for chart in sizes_chart:
             for size in sizes:
                 if size['type'] == chart:
                     return size
 
-
-    def get_pictures(self, uid, qty):
-        get_url = urljoin(self.BASE_URL, 'photos.get')
-        response = requests.get(get_url, params={
-            'access_token': self.token,
-            'v': self.version,
+    def get_pictures(self, uid, qty=5):
+        response = requests.get('https://api.vk.com/method/photos.get', params={
+            'access_token': self.vk_token,
+            'v': '5.131',
             'owner_id': uid,
             'album_id': 'profile',
             'photo_sizes': 1,
-            'extended': 1
-        }).json().get('response').get('items')
+            'extended': 1,
+            }).json().get('response').get('items')
 
         return sorted([Picture(photo.get('date'),
                                photo.get('likes')['count'],
                                self.find_hugest(photo.get('sizes'))) for photo in response],
                       key=lambda p: p.maxsize, reverse=True)[:qty]
-
 
 class YanApi:
     @staticmethod
@@ -72,11 +72,13 @@ class YanApi:
     def __init__(self, token: str):
         self.auth = f'OAuth {token}'
 
+
     def get_folders(self):
         return [a['name'] for a in (requests.get("https://cloud-api.yandex.net/v1/disk/resources",
                                                  params={"path": '/'},
                                                  headers={"Authorization": self.auth})
                                     .json().get('_embedded').get('items')) if a['type'] == 'dir']
+
 
     def creating_folder(self, folder_name):
         resp = requests.put("https://cloud-api.yandex.net/v1/disk/resources",
@@ -84,6 +86,7 @@ class YanApi:
                             headers={"Authorization": self.auth})
         print(f'Создаем папку"{folder_name}":' + str(resp.status_code))
         return resp.ok
+
 
     def upload(self, uid, photos):
         upload_folder = self.check_folder_name(uid, self.get_folders())
@@ -101,7 +104,7 @@ class YanApi:
                 else:
                     print(f'При загрузке "{photo.name}" произошла ошибка: '
                           f'{response.json().get("message")}. Status code: {response.status_code}')
-            with open(f'{uid}_{datetime.now().strftime("%m_%d_%Y_%H_%M_%S")}_files.json', "w") as f:
+            with open(f'{owner_id}_{datetime.now().strftime("%m_%d_%Y_%H_%M_%S")}_files.json', "w") as f:
                 json.dump(log_result, f, indent=2)
 
     def create_folder(self, upload_folder):
@@ -109,10 +112,11 @@ class YanApi:
 
 
 def init():
+    TOKEN = input('Введите Vk токен ')
     yandex_token = input('Введите ваш токен от Я.Диска: ')
-    uid = input('VK user id: ')
-    qty = input('Количество фотографий: ')
-    vk_api = VkApi()
+    uid = int(input('Айди профиля ВК: '))
+    qty = int(input('Количество фотографий: '))
+    vk_api: VkApi = VkApi(TOKEN)
     ya_api: YanApi = YanApi(yandex_token)
     ya_api.upload(uid, vk_api.get_pictures(uid, qty))
 
